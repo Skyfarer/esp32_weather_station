@@ -27,8 +27,11 @@ typedef struct struct_message {
 } struct_message;
 
 // Define sleep time in seconds and conversion factor
-#define TIME_TO_SLEEP 5 // Sleep for 60 seconds
+#define TIME_TO_SLEEP 120 // Sleep for 120 seconds
 #define uS_TO_S_FACTOR 1000000 // Conversion factor for microseconds to seconds
+
+// Set to false to disable sleep for testing
+#define ENABLE_SLEEP true
 
 // Forward declarations
 void sendData();
@@ -41,14 +44,14 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
 
-  //switch to external antenna
-  /*
+  // Switch to external antenna
   pinMode(WIFI_ENABLE, OUTPUT);
   digitalWrite(WIFI_ENABLE, LOW);
   delay(100);
   pinMode(WIFI_ANT_CONFIG, OUTPUT);
   digitalWrite(WIFI_ANT_CONFIG, HIGH);
-*/
+  Serial.println("External antenna enabled");
+
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
   Serial.println("WiFi mode set to STA");
@@ -72,12 +75,13 @@ void setup() {
   }
   Serial.println("Peer added successfully");
 
-  // Temporarily disabled BMP180 for testing
-  /*
+  // Initialize BMP180
   if (!bmp.begin()) {
+    Serial.println("BMP180 init failed!");
     while(1);
   }
-  */
+  Serial.println("BMP180 initialized");
+
   dht.begin();
   Serial.println("DHT22 initialized");
 
@@ -88,6 +92,7 @@ void setup() {
   // Read and send data before going to sleep
   sendData();
 
+#if ENABLE_SLEEP
   // Set the timer to wake up after TIME_TO_SLEEP seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
@@ -99,10 +104,19 @@ void setup() {
 
   // Start deep sleep
   esp_deep_sleep_start();
+#else
+  Serial.println("\nSleep disabled - running in continuous mode");
+#endif
 }
 
 void loop() {
+#if !ENABLE_SLEEP
+  // Continuous operation mode for testing
+  delay(TIME_TO_SLEEP * 1000);
+  sendData();
+#else
   // This will not be called because the ESP32 goes to sleep after setup.
+#endif
 }
 
 void sendData() {
@@ -137,11 +151,16 @@ void sendData() {
     Serial.println(" %");
   }
 
-  // Temporarily disabled BMP180 for testing
-  // float bmp_temperature = bmp.readTemperature();
-  // float pressure = bmp.readPressure() / 100.0F; // Convert Pa to hPa
-  float pressure = 0.0; // Placeholder while BMP180 is disabled
-  Serial.println("Pressure: BMP180 disabled");
+  // Read BMP180 pressure sensor
+  Serial.println("Reading BMP180...");
+  float bmp_temperature = bmp.readTemperature();
+  float pressure = bmp.readPressure() / 100.0F; // Convert Pa to hPa
+  Serial.print("BMP180 Temperature: ");
+  Serial.print(bmp_temperature);
+  Serial.println(" °C");
+  Serial.print("Pressure: ");
+  Serial.print(pressure);
+  Serial.println(" hPa");
 
   // Prepare CSV data string
   char csvData[100];
