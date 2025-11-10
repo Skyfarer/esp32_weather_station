@@ -2,9 +2,26 @@ This is my home weather station built with a Seeed studio ESP32-C6
 
 It measures temperature and humidity with a DHT22 and pressure with a BMP180.
 
-Then it transmits the data over ESPNOW. I have a ESPNOW to Wifi bridge inside the house that sends the data to a MQTT on my Kubernetes cluster.
+Then it transmits the data over ESPNOW. I have an ESPNOW to Wifi bridge inside the house that sends the data to a MQTT on my Kubernetes cluster.
 
 The details of the ESPNOW to Wifi bridge is here: https://github.com/Skyfarer/esp-now2wifi2mqtt
+
+## Photos
+
+### The Weather Station
+![Weather station installed outside](images/outside.jpeg)
+
+### Stevenson Screen
+![Stevenson screen housing](images/stevenson_screen.jpeg)
+
+### Solar Panel
+![Solar panel for power](images/solar-panel.jpeg)
+
+### Hardware Components
+![ESP32-C6 board with sensors](images/board.jpeg)
+
+### External Antenna
+![External antenna](images/antenna.jpeg)
 
 ## Technical Details
 
@@ -12,7 +29,7 @@ The details of the ESPNOW to Wifi bridge is here: https://github.com/Skyfarer/es
 - **Board**: Seeed XIAO ESP32-C6
 - **Sensors**:
   - DHT22 on GPIO1 (D1) - Temperature and humidity
-  - BMP180 via I2C - Barometric pressure (currently disabled in code)
+  - BMP180 via I2C - Barometric pressure
 - **Battery monitoring**: ADC on A0 with 2:1 voltage divider
 - **Status LED**: GPIO15
 
