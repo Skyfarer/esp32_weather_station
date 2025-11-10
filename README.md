@@ -14,6 +14,8 @@ The details of the ESPNOW to Wifi bridge is here: https://github.com/Skyfarer/es
 ### Stevenson Screen
 ![Stevenson screen housing](images/stevenson_screen.jpeg)
 
+The Stevenson screen housing is 3D printed using this design: https://www.thingiverse.com/thing:2970799
+
 ### Solar Panel
 ![Solar panel for power](images/solar-panel.jpeg)
 
