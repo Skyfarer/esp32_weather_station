@@ -2,8 +2,7 @@ This is my home weather station built with a Seeed studio ESP32-C6
 
 It measures temperature, pressure, humidity, and gas resistance (air quality) with a BME680 ~~DHT22 and pressure with a BMP180~~. The BME680 is a nice board, I replaced the DHT22 and the BMP180 with the BME680. Now I can measure everyting plus air quality with a simpler circuit.
 
-Then it transmits the data over ESPNOW. I have an ESPNOW to serial bridge inside the house that sends the data to a Pi zero. 
-
+It transmits the data over ESPNOW. I have an ESP8266 inside the house to receive the ESPNOW and bridge this to USB serial. On the other end of the serial USB cable is a Pi zero with a e-ink display. 
 
 ## Photos
 
