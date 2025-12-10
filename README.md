@@ -1,6 +1,6 @@
 This is my home weather station built with a Seeed studio ESP32-C6
 
-It measures temperature, pressure, humidity, and gas resistance (air quality) with a BME680 --DHT22 and pressure with a BMP180--.
+It measures temperature, pressure, humidity, and gas resistance (air quality) with a BME680 ~~DHT22 and pressure with a BMP180~~. The BME680 is a nice board, I replaced the DHT22 and the BMP180 with the BME680. Now I can measure everyting plus air quality with a simpler circuit.
 
 Then it transmits the data over ESPNOW. I have an ESPNOW to serial bridge inside the house that sends the data to a Pi zero. 
 
@@ -30,8 +30,8 @@ The Stevenson screen housing is 3D printed using this design: https://www.thingi
 - **Board**: Seeed XIAO ESP32-C6
 - **Sensors**:
   - BME680 via I2C - Temperature, Humidity, Pressure, and Gas Resistance (air quality) sensor breakout board
-  -- DHT22 on GPIO1 (D1) - Temperature and humidity--
-  -- BMP180 via I2C - Barometric pressure--
+  - ~~DHT22 on GPIO1 (D1) - Temperature and humidity~~
+  - ~~BMP180 via I2C - Barometric pressure~~
 - **Battery monitoring**: ADC on A0 with 2:1 voltage divider
 - **Status LED**: GPIO15
 
