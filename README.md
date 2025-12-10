@@ -1,10 +1,9 @@
 This is my home weather station built with a Seeed studio ESP32-C6
 
-It measures temperature and humidity with a DHT22 and pressure with a BMP180.
+It measures temperature, pressure, humidity, and gas resistance (air quality) with a BME680 --DHT22 and pressure with a BMP180--.
 
-Then it transmits the data over ESPNOW. I have an ESPNOW to Wifi bridge inside the house that sends the data to a MQTT on my Kubernetes cluster.
+Then it transmits the data over ESPNOW. I have an ESPNOW to serial bridge inside the house that sends the data to a Pi zero. 
 
-The details of the ESPNOW to Wifi bridge is here: https://github.com/Skyfarer/esp-now2wifi2mqtt
 
 ## Photos
 
@@ -30,8 +29,9 @@ The Stevenson screen housing is 3D printed using this design: https://www.thingi
 ### Hardware
 - **Board**: Seeed XIAO ESP32-C6
 - **Sensors**:
-  - DHT22 on GPIO1 (D1) - Temperature and humidity
-  - BMP180 via I2C - Barometric pressure
+  - BME680 via I2C - Temperature, Humidity, Pressure, and Gas Resistance (air quality) sensor breakout board
+  -- DHT22 on GPIO1 (D1) - Temperature and humidity--
+  -- BMP180 via I2C - Barometric pressure--
 - **Battery monitoring**: ADC on A0 with 2:1 voltage divider
 - **Status LED**: GPIO15
 
@@ -44,9 +44,15 @@ The Stevenson screen housing is 3D printed using this design: https://www.thingi
 ### Data Format
 Data is transmitted via ESP-NOW as comma-separated values (CSV):
 ```
-temperature,humidity,pressure,battery
+temperature,humidity,pressure,gas,battery
 ```
-Example: `23.50,65.20,1013.25,3.85`
+- Temperature in °C
+- Humidity in %
+- Pressure in hPa
+- Gas resistance in KOhms (air quality indicator)
+- Battery voltage in V
+
+Example: `23.50,65.20,1013.25,45.32,3.85`
 
 ### Build and Upload
 ```bash
