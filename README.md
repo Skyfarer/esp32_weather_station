@@ -1,8 +1,8 @@
-This is my home weather station built with a Seeed studio ESP32-C6
+This is my home weather station built with an ESP32-D board
 
-It measures temperature, pressure, humidity, and gas resistance (air quality) with a BME680 ~~DHT22 and pressure with a BMP180~~. The BME680 is a nice board, I replaced the DHT22 and the BMP180 with the BME680. Now I can measure everyting plus air quality with a simpler circuit.
+It measures temperature and humidity with an AHT20, and pressure with a BMP280 ~~and gas resistance (air quality) with a BME680~~ ~~DHT22 and pressure with a BMP180~~. I swapped the BME680 for an AHT20+BMP280 combo module, trading away air quality sensing.
 
-It transmits the data over ESPNOW. I have an ESP8266 inside the house to receive the ESPNOW and bridge this to USB serial. On the other end of the serial USB cable is a Pi zero with a e-ink display. 
+It transmits the data over ESP-NOW to an ESP32-C6 inside the house, which relays it to MQTT. A Raspberry Pi Zero subscribes to MQTT and drives an e-ink display.
 
 ## Photos
 
@@ -26,13 +26,15 @@ The Stevenson screen housing is 3D printed using this design: https://www.thingi
 ## Technical Details
 
 ### Hardware
-- **Board**: Seeed XIAO ESP32-C6
+- **Board**: Generic ESP32-D (ESP32-D0WD)
 - **Sensors**:
-  - BME680 via I2C - Temperature, Humidity, Pressure, and Gas Resistance (air quality) sensor breakout board
+  - AHT20 via I2C - Temperature and humidity
+  - BMP280 via I2C - Barometric pressure
+  - ~~BME680 via I2C - Temperature, Humidity, Pressure, and Gas Resistance (air quality) sensor breakout board~~
   - ~~DHT22 on GPIO1 (D1) - Temperature and humidity~~
   - ~~BMP180 via I2C - Barometric pressure~~
 - **Battery monitoring**: ADC on A0 with 2:1 voltage divider
-- **Status LED**: GPIO15
+- **Status LED**: GPIO2 (onboard)
 
 ### Power Management
 - Deep sleep mode enabled to conserve battery
@@ -48,7 +50,7 @@ temperature,humidity,pressure,gas,battery
 - Temperature in °C
 - Humidity in %
 - Pressure in hPa
-- Gas resistance in KOhms (air quality indicator)
+- Gas resistance in KOhms (air quality indicator) - always NaN since the AHT20/BMP280 swap; kept in the struct for wire compatibility with the relay/MQTT/Pi
 - Battery voltage in V
 
 Example: `23.50,65.20,1013.25,45.32,3.85`

@@ -1,8 +1,11 @@
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <math.h>
 #include <Adafruit_Sensor.h>
-#include "Adafruit_BME680.h"
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_BMP280.h>
 
 // ESP-NOW receiver MAC address
 // Default to broadcast address - create config.h to override with specific MAC
@@ -12,23 +15,32 @@
   uint8_t receiverAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #endif
 
-#define LED_PIN 15
+#define LED_PIN 2
 
-// Initialize BME680 sensor
-Adafruit_BME680 bme;
+// Must match ESPNOW_CHANNEL in the esp-now-listener receiver
+#define ESPNOW_CHANNEL 1
+
+// Initialize AHT20 (temperature/humidity) and BMP280 (pressure) sensors
+Adafruit_AHTX0 aht;
+Adafruit_BMP280 bmp;
+bool ahtAvailable = true;
+bool bmpAvailable = true;
 
 // Data structure for ESP-NOW
 typedef struct __attribute__((packed)) struct_message {
   float temperature;
   float humidity;
   float pressure;
-  float gas;
+  float gas;  // Always NaN - AHT20/BMP280 has no gas sensing (kept for wire compatibility with the BME680 relay/MQTT/Pi consumers)
   float battery;
   uint32_t checksum;  // Simple checksum for data integrity
 } struct_message;
 
+// Station elevation, used to adjust absolute pressure to sea-level-equivalent
+#define STATION_ALTITUDE_METERS 209.7 // 688 ft
+
 // Define sleep time in seconds and conversion factor
-#define TIME_TO_SLEEP 60 // Sleep for 120 seconds
+#define TIME_TO_SLEEP 120
 #define uS_TO_S_FACTOR 1000000 // Conversion factor for microseconds to seconds
 
 // Set to false to disable sleep for testing
@@ -51,16 +63,26 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
 
-  // Switch to external antenna
-  pinMode(WIFI_ENABLE, OUTPUT);
-  digitalWrite(WIFI_ENABLE, LOW);
-  delay(100);
-  pinMode(WIFI_ANT_CONFIG, OUTPUT);
-  digitalWrite(WIFI_ANT_CONFIG, HIGH);
-  Serial.println("External antenna enabled");
+  // TEMP DEBUG: scan I2C bus to find connected devices
+  Wire.begin();
+  Serial.println("Scanning I2C bus...");
+  int devicesFound = 0;
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("  Found device at 0x");
+      Serial.println(addr, HEX);
+      devicesFound++;
+    }
+  }
+  if (devicesFound == 0) {
+    Serial.println("  No I2C devices found!");
+  }
 
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false); // Disable modem sleep so we don't miss the ESP-NOW ack window
+  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   Serial.println("WiFi mode set to STA");
 
   // Initialize ESP-NOW
@@ -75,10 +97,11 @@ void setup() {
   Serial.println("Send callback registered");
 
   // Register peer
-  esp_now_peer_info_t peerInfo;
+  esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receiverAddress, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = ESPNOW_CHANNEL;
   peerInfo.encrypt = false;
+  peerInfo.ifidx = WIFI_IF_STA;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("Failed to add peer!");
@@ -86,22 +109,28 @@ void setup() {
   }
   Serial.println("Peer added successfully");
 
-  // Initialize BME680
-  if (!bme.begin()) {
-    Serial.println("BME680 init failed! Check wiring.");
-    while(1);
+  // Initialize AHT20
+  ahtAvailable = aht.begin();
+  if (!ahtAvailable) {
+    Serial.println("AHT20 init failed! Check wiring. Will still report other readings.");
+  } else {
+    Serial.println("AHT20 initialized");
   }
-  Serial.println("BME680 initialized");
 
-  // Set up BME680 oversampling and filter
-  bme.setTemperatureOversampling(BME680_OS_8X);
-  bme.setHumidityOversampling(BME680_OS_2X);
-  bme.setPressureOversampling(BME680_OS_4X);
-  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-  bme.setGasHeater(320, 150); // 320°C for 150 ms
+  // Initialize BMP280
+  bmpAvailable = bmp.begin();
+  if (!bmpAvailable) {
+    Serial.println("BMP280 init failed! Check wiring. Will still report other readings.");
+  } else {
+    Serial.println("BMP280 initialized");
 
-  Serial.println("Waiting 2s for BME680 to stabilize...");
-  delay(2000);
+    // Forced mode takes a single on-demand reading, matching the BME680's single-shot behavior
+    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,
+                     Adafruit_BMP280::SAMPLING_X1,  // Temperature oversampling (unused - we read temp from the AHT20)
+                     Adafruit_BMP280::SAMPLING_X16, // Pressure oversampling
+                     Adafruit_BMP280::FILTER_OFF,
+                     Adafruit_BMP280::STANDBY_MS_1);
+  }
 
   // Read and send data before going to sleep
   sendData();
@@ -141,35 +170,53 @@ void sendData() {
   for (int i = 0; i < 16; i++) {
     Vbatt += analogReadMilliVolts(A0); // Read ADC with correction
   }
-  float Vbattf = 2 * Vbatt / 16 / 1000.0; // Adjust for divider ratio
+  float Vbattf = 5 * Vbatt / 16 / 1000.0; // Adjust for divider ratio (30k/7.5k = 5:1)
   Serial.print("Battery Voltage: ");
   Serial.print(Vbattf);
   Serial.println(" V");
 
-  // Read BME680 sensor
-  Serial.println("Reading BME680...");
-  if (!bme.performReading()) {
-    Serial.println("BME680 reading FAILED!");
-    return;
+  // Read AHT20/BMP280 sensors (NaN sentinel values mean sensor missing/unreadable this cycle)
+  float temperature = NAN;
+  float humidity = NAN;
+  float pressure = NAN;
+  float gas = NAN; // No gas sensing on AHT20/BMP280 - always NaN
+
+  if (!ahtAvailable) {
+    Serial.println("AHT20 not available - skipping temperature/humidity");
+  } else {
+    Serial.println("Reading AHT20...");
+    sensors_event_t humidityEvent, tempEvent;
+    if (!aht.getEvent(&humidityEvent, &tempEvent)) {
+      Serial.println("AHT20 reading FAILED!");
+    } else {
+      temperature = tempEvent.temperature;
+      humidity = humidityEvent.relative_humidity;
+
+      Serial.print("Temperature: ");
+      Serial.print(temperature);
+      Serial.println(" °C");
+      Serial.print("Humidity: ");
+      Serial.print(humidity);
+      Serial.println(" %");
+    }
   }
 
-  float temperature = bme.temperature;
-  float humidity = bme.humidity;
-  float pressure = bme.pressure / 100.0; // Convert Pa to hPa
-  float gas = bme.gas_resistance / 1000.0; // Convert to KOhms
+  if (!bmpAvailable) {
+    Serial.println("BMP280 not available - skipping pressure");
+  } else {
+    Serial.println("Reading BMP280...");
+    if (!bmp.takeForcedMeasurement()) {
+      Serial.println("BMP280 reading FAILED!");
+    } else {
+      pressure = bmp.readPressure() / 100.0; // Convert Pa to hPa
+      // Adjust station (absolute) pressure to sea-level-equivalent using the standard barometric formula
+      pressure = pressure / pow(1.0 - (STATION_ALTITUDE_METERS / 44330.0), 5.255);
 
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.println(" °C");
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.println(" %");
-  Serial.print("Pressure: ");
-  Serial.print(pressure);
-  Serial.println(" hPa");
-  Serial.print("Gas Resistance: ");
-  Serial.print(gas);
-  Serial.println(" KOhms");
+      Serial.print("Pressure (sea level): ");
+      Serial.print(pressure);
+      Serial.println(" hPa");
+    }
+  }
 
   // Prepare binary struct data
   struct_message sensorData;
@@ -224,11 +271,11 @@ void sendData() {
 
       if (messageSent) {
         if (sendSuccess) {
-          Serial.println("✓ Delivery confirmed by receiver!");
+          Serial.println("✓ Radio transmit confirmed (receiver ack received)");
           delivered = true;
           blinkLED();
         } else {
-          Serial.println("✗ Delivery failed - receiver did not acknowledge");
+          Serial.println("✗ Radio transmit failed");
         }
       } else {
         Serial.println("✗ Callback timeout - no response from receiver");
